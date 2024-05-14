@@ -21,7 +21,6 @@ resources:
     branch: main
     uri: git@github.com:drahnr/ci-tron.git
     private_key: ((sirmergealot-ssh-key))
-    private_key_username: ((sirmergealot-gh-username))
     paths: [ ".concourse/*" ]
 
 
@@ -33,7 +32,6 @@ resources:
     branch: main
     uri: git@github.com:drahnr/ci-tron.git
     private_key: ((sirmergealot-ssh-key))
-    private_key_username: ((sirmergealot-gh-username))
     paths: [ ".concourse/*" ]
 
 
