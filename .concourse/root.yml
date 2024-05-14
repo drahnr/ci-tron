@@ -18,7 +18,7 @@ resources:
   check_every: 5m
   webhook_token: ((ci-tron-webhook-token))
   source:
-    branch: main
+    branch: master
     uri: git@github.com:drahnr/ci-tron.git
     private_key: ((sirmergealot-ssh-key))
     paths: [ ".concourse/*" ]
@@ -29,10 +29,9 @@ resources:
   check_every: 5m
   webhook_token: ((ci-tron-webhook-token))
   source:
-    branch: main
+    branch: master
     uri: git@github.com:drahnr/ci-tron.git
     private_key: ((sirmergealot-ssh-key))
-    paths: [ ".concourse/*" ]
 
 
 - name: git-pull-request-resource
@@ -69,12 +68,11 @@ jobs:
 
     do:
       # fetch the pull request branch
-      - get: pull-request
+      - get: pr-content
         resource: that-git-branch
-        trigger: true
         params:
           branch: ((.:pr.branch))
  
       - set_pipeline: that-pr
-        file: pull-request/.concourse/pipelines/pr.yml
+        file: pr-content/.concourse/pipelines/pr.yml
         instance_vars: {number: ((.:pr.number))}
