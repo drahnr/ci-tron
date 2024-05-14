@@ -6,16 +6,20 @@ resource_types:
     repository: docker.io/tasruntime/github-pr-instances-resource
 
 resources:
-- name: git-clone-resource
-  type: git
-  check_every: 5m
-  webhook_token: ((ci-tron-webhook-token))
-  source:
-    branch: master
-    uri: git@github.com:drahnr/ci-tron.git
-    private_key: ((sirmergealot-ssh-key))
-    paths: [ ".concourse/*" ]
+# - name: git-clone-resource
+#   type: git
+#   check_every: 5m
+#   webhook_token: ((ci-tron-webhook-token))
+#   source:
+#     branch: master
+#     uri: git@github.com:drahnr/ci-tron.git
+#     private_key: ((sirmergealot-ssh-key))
+#     paths: [ ".concourse/*" ]
 
+- name: env-glibc
+  type: registry-image
+  source:
+    repository: quay.io/drahnr/rust-glibc-builder
 
 - name: git-pull-request-resource
   type: pull-request
@@ -26,16 +30,19 @@ resources:
     access_token: ((sirmergealot-github-token))
 
 jobs:
-- name: update-how-pr-pipelines-are-updates
-  plan:
-  - get: git-master
-    resource: git-clone-resource
-    trigger: true
-  - set_pipeline: self
-    file: git-master/.concourse/root.yml
+# - name: update-how-pr-pipelines-are-updates
+#   plan:
+#   - get: git-master
+#     resource: git-clone-resource
+#     trigger: true
+#   - set_pipeline: self
+#     file: git-master/.concourse/root.yml
 
 - name: update-pr-pipelines
   plan:
+  
+  - get: env-glibc
+
   # load the pull request list
   - get: pull-request
     resource: git-pull-request-resource
@@ -53,10 +60,11 @@ jobs:
       # it's not a very clean approach, but it avoids needing
       # another pipeline level indirection
       - task: pr-content
-        timeout: 10m
+        vars:
+          number: ((.:pr.number))
         params:
-          GIT_PRIVATE_KEY: ((sirmergealot-ssh-key))
-          GIT_BRANCH: ((.:pr.branch))
+          NUMBER: ((.:pr.number))
+        timeout: 10m
         image: env-glibc
         config:
           public: false
@@ -69,10 +77,16 @@ jobs:
             args:
             - -exc
             - |
+              sudo chown -Rvf $(whoami): .
               mkdir -v -p ~/.ssh
               chmod -Rvf 0750 ~/.ssh
-              echo "${GIT_PRIVATE_KEY}" > ~/.ssh/sirmergealot 
-              git clone --branch ${GIT_BRANCH} git@github.com:drahnr/ci-tron.git foo
+              echo "${GIT_PRIVATE_KEY}" > ~/.ssh/sirmergealot
+              export GIT_BRANCH_NAME=yikes-((.:pr.number))
+              ssh -o StrictHostKeyChecking=accept-new git@github.com || echo "Yikes"
+              git init .
+              git remote add origin git@github.com:drahnr/ci-tron.git
+              git fetch origin pull/((.:pr.number))/head:${GIT_BRANCH_NAME}
+              git checkout ${GIT_BRANCH_NAME}
 
       - set_pipeline: ci-tron-prs
         file: foo/.concourse/pipelines/pr.yml
