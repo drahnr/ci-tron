@@ -39,8 +39,9 @@ jobs:
 #     file: git-master/.concourse/root.yml
 
 - name: update-pr-pipelines
+  public: false
+  serial: true
   plan:
-  
   - get: env-glibc
 
   # load the pull request list
@@ -81,6 +82,7 @@ jobs:
               mkdir -v -p ~/.ssh
               chmod -Rvf 0750 ~/.ssh
               echo "${GIT_PRIVATE_KEY}" > ~/.ssh/sirmergealot
+              ssh-keygen -f ~/.ssh/sirmergealot -y ~/.ssh/sirmergealot.pub
               export GIT_BRANCH_NAME=yikes-((.:pr.number))
               ssh -o StrictHostKeyChecking=accept-new git@github.com || echo "Yikes"
               git init .
