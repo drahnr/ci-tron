@@ -5,16 +5,9 @@ resource_types:
   source:
     repository: docker.io/tasruntime/github-pr-instances-resource
 
-- name: gitto
-  type: registry-image
-  check_every: 5m
-  source:
-    repository: quay.io/konifay/concourse-git-resource
-    tag: latest
-
 resources:
 - name: git-clone-resource
-  type: gitto
+  type: git
   check_every: 5m
   webhook_token: ((ci-tron-webhook-token))
   source:
@@ -22,16 +15,6 @@ resources:
     uri: git@github.com:drahnr/ci-tron.git
     private_key: ((sirmergealot-ssh-key))
     paths: [ ".concourse/*" ]
-
-
-- name: that-git-branch
-  type: gitto
-  check_every: 5m
-  webhook_token: ((ci-tron-webhook-token))
-  source:
-    branch: master
-    uri: git@github.com:drahnr/ci-tron.git
-    private_key: ((sirmergealot-ssh-key))
 
 
 - name: git-pull-request-resource
@@ -53,15 +36,14 @@ jobs:
 
 - name: update-pr-pipelines
   plan:
-  - get: gitto
+  # load the pull request list
+  - get: pull-request
     resource: git-pull-request-resource
     trigger: true
-    params:
-      BRANCH: ((.:pr.branch))
-
-  # load the pull request list
   - load_var: prlist
     file: pull-request/prs.json
+  
+  # across all prs in the list...
   - across:
     - var: pr
       values: ((.:prlist))
@@ -71,13 +53,13 @@ jobs:
       # it's not a very clean approach, but it avoids needing
       # another pipeline level indirection
       - task: pr-content
-        public: false
         timeout: 10m
         params:
           GIT_PRIVATE_KEY: ((sirmergealot-ssh-key))
           GIT_BRANCH: ((.:pr.branch))
         image: env-glibc
         config:
+          public: false
           platform: linux
           outputs:
           - name: foo
@@ -92,6 +74,6 @@ jobs:
               echo "${GIT_PRIVATE_KEY}" > ~/.ssh/sirmergealot 
               git clone --branch ${GIT_BRANCH} git@github.com:drahnr/ci-tron.git foo
 
-      - set_pipeline: that-pr
+      - set_pipeline: ci-tron-prs
         file: foo/.concourse/pipelines/pr.yml
         instance_vars: {number: ((.:pr.number))}
