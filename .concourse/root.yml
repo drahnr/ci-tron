@@ -1,0 +1,82 @@
+resource_types:
+- name: pull-request
+  type: registry-image
+  check_every: 5m
+  source:
+    repository: docker.io/tasruntime/github-pr-instances-resource
+
+- name: gitto
+  type: registry-image
+  check_every: 5m
+  source:
+    repository: quay.io/konifay/concourse-git-resource
+    tag: latest
+
+resources:
+- name: git-clone-resource
+  type: gitto
+  check_every: 5m
+  webhook_token: ((ci-tron-webhook-token))
+  source:
+    branch: main
+    uri: git@github.com:drahnr/ci-tron.git
+    private_key: ((sirmergealot-ssh-key))
+    private_key_username: ((sirmergealot-gh-username))
+    paths: [ ".concourse/*" ]
+
+
+- name: that-git-branch
+  type: gitto
+  check_every: 5m
+  webhook_token: ((ci-tron-webhook-token))
+  source:
+    branch: main
+    uri: git@github.com:drahnr/ci-tron.git
+    private_key: ((sirmergealot-ssh-key))
+    private_key_username: ((sirmergealot-gh-username))
+    paths: [ ".concourse/*" ]
+
+
+- name: git-pull-request-resource
+  type: pull-request
+  webhook_token: ((ci-tron-webhook-token))
+  check_every: 1m
+  source:
+    repository: drahnr/ci-tron
+    access_token: ((sirmergealot-github-token))
+
+jobs:
+- name: update-how-pr-pipelines-are-updates
+  plan:
+  - get: master
+    resource: git-clone-resource
+    trigger: true
+  - set_pipeline: self
+    file: master/.concourse/root.yml
+
+- name: update-pr-pipelines
+  plan:
+  - get: gitto
+    resource: git-pull-request-resource
+    trigger: true
+    params:
+      BRANCH: ((.:pr.branch))
+
+  # load the pull request list
+  - load_var: prlist
+    file: pull-request/prs.json
+  - across:
+    - var: pr
+      values: ((.:prlist))
+
+    do:
+      # fetch the pull request branch
+      - get: pull-request
+        resource: that-git-branch
+        trigger: true
+        params:
+          branch: ((.:pr.branch))
+ 
+      - set_pipeline: that-pr
+        file: pull-request/.concourse/pipelines/pr.yml
+        instance_vars: {number: ((.:pr.number))}

@@ -1,0 +1,98 @@
+resource_types:
+- name: pull-request
+  type: registry-image
+  # one cannot use the common github-pull-request-resource by
+  # telia-oss, it doesn't support instanced resources
+  # as needed in pr.yml as well as here, listing all pull requests.
+  source:
+    repository: docker.io/tasruntime/github-pr-instances-resource
+
+resources:
+- name: git-pull-request-resource
+  type: pull-request
+  webhook_token: ((node-webhook-token))
+  check_every: 30s
+  source:
+    repository: drahnr/ci-tron
+    access_token: ((sirmergealot-github-token))
+    # vital, each per-PR pipeline must only trgger on one PR
+    number: ((number))
+
+- name: env-glibc
+  type: registry-image
+  source:
+    repository: quay.io/drahnr/rust-glibc-builder
+
+
+git-pull-request-status: &pending
+  resource: git-pull-request-resource
+  inputs: detect
+  params:
+    path: git-pull-request-resource
+    context: cargo-fmt
+    status: pending
+  get_params: {skip_download: true}
+
+git-pull-request-status: &success
+  resource: git-pull-request-resource
+  inputs: detect
+  params:
+    path: git-pull-request-resource
+    context: cargo-fmt
+    status: failure
+  get_params: {skip_download: true}
+
+git-pull-request-status: &failure
+  resource: git-pull-request-resource
+  inputs: detect
+  params:
+    path: git-pull-request-resource
+    context: cargo-fmt
+    status: failure
+  get_params: {skip_download: true}
+
+
+jobs:
+####################################################################################
+#                              P U L L - R E Q U E S T
+####################################################################################
+  - name: foo
+    plan:
+    - get: git-pull-request-resource
+      params:
+        integration_tool: rebase
+      version: every
+      trigger: true
+
+    - get: env-glibc
+
+    - put: *pending
+      params:
+        context: cargo-fmt
+
+    - task: pr-check-rust-formatting
+      timeout: 10m
+      image: env-glibc
+      config:
+        platform: linux
+        inputs:
+        - name: git-pull-request-resource
+        run:
+          dir: git-pull-request-resource
+          path: sh
+          args:
+          - -exc
+          - |
+            cargo +nightly fmt --version
+
+            cargo +nightly fmt -- --check
+
+      on_success:
+        put: *success
+        params:
+          context: cargo-fmt
+
+      on_failure:
+        put: *failure
+        params:
+          context: cargo-fmt
