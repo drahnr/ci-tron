@@ -24,32 +24,35 @@ resources:
     repository: quay.io/drahnr/rust-glibc-builder
 
 
-git-pull-request-status: &pending
+prst-pending: &status-pending
+  put: prst-pending
   resource: git-pull-request-resource
-  inputs: detect
-  params:
+  inputs: [git-pull-request-resource]
+  params: 
     path: git-pull-request-resource
-    context: cargo-fmt
+    context: $BUILD_JOB_NAME
     status: pending
   get_params: {skip_download: true}
 
-git-pull-request-status: &success
-  resource: git-pull-request-resource
-  inputs: detect
-  params:
-    path: git-pull-request-resource
-    context: cargo-fmt
-    status: failure
-  get_params: {skip_download: true}
-
-git-pull-request-status: &failure
-  resource: git-pull-request-resource
-  inputs: detect
-  params:
-    path: git-pull-request-resource
-    context: cargo-fmt
-    status: failure
-  get_params: {skip_download: true}
+prst-result: &status-result
+  on_success:
+    put: prst-success
+    resource: git-pull-request-resource
+    inputs: [git-pull-request-resource]
+    params:
+      path: git-pull-request-resource
+      context: $BUILD_JOB_NAME
+      status: failure
+    get_params: {skip_download: true}
+  on_failure:
+    put: prst-failure
+    resource: git-pull-request-resource
+    inputs: [git-pull-request-resource]
+    params:
+      path: git-pull-request-resource
+      context: $BUILD_JOB_NAME
+      status: failure
+    get_params: {skip_download: true}
 
 
 jobs:
@@ -58,6 +61,7 @@ jobs:
 ####################################################################################
   - name: foo
     plan:
+
     - get: git-pull-request-resource
       params:
         integration_tool: rebase
@@ -66,11 +70,9 @@ jobs:
 
     - get: env-glibc
 
-    - put: *pending
-      params:
-        context: cargo-fmt
+    - <<: *status-pending
 
-    - task: pr-check-rust-formatting
+    - task: cargo-fmt
       timeout: 10m
       image: env-glibc
       config:
@@ -86,13 +88,4 @@ jobs:
             cargo +nightly fmt --version
 
             cargo +nightly fmt -- --check
-
-      on_success:
-        put: *success
-        params:
-          context: cargo-fmt
-
-      on_failure:
-        put: *failure
-        params:
-          context: cargo-fmt
+      <<: *status-result

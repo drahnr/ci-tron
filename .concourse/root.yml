@@ -92,7 +92,6 @@ jobs:
               # import the github domain related keys
               ssh -o StrictHostKeyChecking=accept-new git@github.com || echo "Yikes"
 
-
               export GIT_BRANCH_NAME=yikes-((.:pr.number))
 
               # initialize
