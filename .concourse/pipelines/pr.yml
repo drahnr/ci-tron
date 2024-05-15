@@ -60,6 +60,8 @@ jobs:
 #                              P U L L - R E Q U E S T
 ####################################################################################
   - name: foo
+    <<: *status-result
+
     plan:
 
     - get: git-pull-request-resource
@@ -68,9 +70,9 @@ jobs:
       version: every
       trigger: true
 
-    - get: env-glibc
-
     - <<: *status-pending
+
+    - get: env-glibc
 
     - task: cargo-fmt
       timeout: 10m
@@ -88,4 +90,3 @@ jobs:
             cargo +nightly fmt --version
 
             cargo +nightly fmt -- --check
-      <<: *status-result
