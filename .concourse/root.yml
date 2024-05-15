@@ -103,8 +103,5 @@ jobs:
 
       - set_pipeline: ci-tron-prs
         file: foo/.concourse/pipelines/pr.yml
-        vars:
-          sirmergealot-github-token: ((sirmergealot-github-token))
-          sirmergealot-webhook-token: ((sirmergealot-webhook-token))
-        instance_vars:
-          number: ((.:pr.number))
+        vars: { sirmergealot-github-token: ((sirmergealot-github-token)), sirmergealot-webhook-token: "abc123" }
+        instance_vars: { number: ((.:pr.number)) }
