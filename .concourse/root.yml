@@ -50,7 +50,7 @@ jobs:
     trigger: true
   - load_var: prlist
     file: pull-request/prs.json
-  
+
   # across all prs in the list...
   - across:
     - var: pr
@@ -79,12 +79,24 @@ jobs:
             - -exc
             - |
               sudo chown -Rvf $(whoami): .
+
+              # setup ssh keys
               mkdir -v -p ~/.ssh
               chmod -Rvf 0750 ~/.ssh
-              echo "${GIT_PRIVATE_KEY}" > ~/.ssh/sirmergealot
-              ssh-keygen -f ~/.ssh/sirmergealot -y ~/.ssh/sirmergealot.pub
-              export GIT_BRANCH_NAME=yikes-((.:pr.number))
+              echo "((sirmergealot-ssh-key))" > ~/.ssh/sirmergealot
+              chmod -vf 0600 ~/.ssh/sirmergealot
+              ssh-keygen -f ~/.ssh/sirmergealot -y > ~/.ssh/sirmergealot.pub
+              eval "$(ssh-agent -s)"
+              ssh-add ~/.ssh/sirmergealot
+
+              # import the github domain related keys
               ssh -o StrictHostKeyChecking=accept-new git@github.com || echo "Yikes"
+
+
+              export GIT_BRANCH_NAME=yikes-((.:pr.number))
+
+              # initialize
+              git config --global init.defaultBranch main
               git init .
               git remote add origin git@github.com:drahnr/ci-tron.git
               git fetch origin pull/((.:pr.number))/head:${GIT_BRANCH_NAME}
