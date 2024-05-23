@@ -1,82 +1,106 @@
 resource_types:
 - name: pull-request
   type: registry-image
-  check_every: 5m
+  check_every: 1m
   source:
     repository: docker.io/tasruntime/github-pr-instances-resource
 
-- name: gitto
-  type: registry-image
-  check_every: 5m
-  source:
-    repository: quay.io/konifay/concourse-git-resource
-    tag: latest
-
 resources:
-- name: git-clone-resource
-  type: gitto
-  check_every: 5m
-  webhook_token: ((ci-tron-webhook-token))
+# - name: git-clone-resource
+#   type: git
+#   check_every: 5m
+#   webhook_token: ((ci-tron-webhook-token))
+#   source:
+#     branch: master
+#     uri: git@github.com:drahnr/ci-tron.git
+#     private_key: ((sirmergealot-ssh-key))
+#     paths: [ ".concourse/*" ]
+
+- name: env-glibc
+  type: registry-image
   source:
-    branch: main
-    uri: git@github.com:drahnr/ci-tron.git
-    private_key: ((sirmergealot-ssh-key))
-    private_key_username: ((sirmergealot-gh-username))
-    paths: [ ".concourse/*" ]
-
-
-- name: that-git-branch
-  type: gitto
-  check_every: 5m
-  webhook_token: ((ci-tron-webhook-token))
-  source:
-    branch: main
-    uri: git@github.com:drahnr/ci-tron.git
-    private_key: ((sirmergealot-ssh-key))
-    private_key_username: ((sirmergealot-gh-username))
-    paths: [ ".concourse/*" ]
-
+    repository: quay.io/drahnr/rust-glibc-builder
 
 - name: git-pull-request-resource
   type: pull-request
   webhook_token: ((ci-tron-webhook-token))
-  check_every: 1m
   source:
     repository: drahnr/ci-tron
     access_token: ((sirmergealot-github-token))
 
 jobs:
-- name: update-how-pr-pipelines-are-updates
-  plan:
-  - get: master
-    resource: git-clone-resource
-    trigger: true
-  - set_pipeline: self
-    file: master/.concourse/root.yml
+# - name: update-how-pr-pipelines-are-updates
+#   plan:
+#   - get: git-master
+#     resource: git-clone-resource
+#     trigger: true
+#   - set_pipeline: self
+#     file: git-master/.concourse/root.yml
 
 - name: update-pr-pipelines
+  public: false
+  serial: true
   plan:
-  - get: gitto
-    resource: git-pull-request-resource
-    trigger: true
-    params:
-      BRANCH: ((.:pr.branch))
+  - get: env-glibc
 
   # load the pull request list
+  - get: pull-request
+    resource: git-pull-request-resource
+    trigger: true
   - load_var: prlist
     file: pull-request/prs.json
+
+  # across all prs in the list...
   - across:
     - var: pr
       values: ((.:prlist))
 
     do:
       # fetch the pull request branch
-      - get: pull-request
-        resource: that-git-branch
-        trigger: true
+      # it's not a very clean approach, but it avoids needing
+      # another pipeline level indirection
+      - task: pr-content
+        vars:
+          number: ((.:pr.number))
         params:
-          branch: ((.:pr.branch))
- 
-      - set_pipeline: that-pr
-        file: pull-request/.concourse/pipelines/pr.yml
-        instance_vars: {number: ((.:pr.number))}
+          NUMBER: ((.:pr.number))
+        timeout: 10m
+        image: env-glibc
+        config:
+          public: false
+          platform: linux
+          outputs:
+          - name: foo
+          run:
+            dir: foo
+            path: sh
+            args:
+            - -exc
+            - |
+              sudo chown -Rvf $(whoami): .
+
+              # setup ssh keys
+              mkdir -v -p ~/.ssh
+              chmod -Rvf 0750 ~/.ssh
+              echo "((sirmergealot-ssh-key))" > ~/.ssh/sirmergealot
+              chmod -vf 0600 ~/.ssh/sirmergealot
+              ssh-keygen -f ~/.ssh/sirmergealot -y > ~/.ssh/sirmergealot.pub
+              eval "$(ssh-agent -s)"
+              ssh-add ~/.ssh/sirmergealot
+
+              # import the github domain related keys
+              ssh -o StrictHostKeyChecking=accept-new git@github.com || echo "Yikes"
+
+              export GIT_BRANCH_NAME=yikes-((.:pr.number))
+
+              # initialize
+              git config --global init.defaultBranch main
+              git init .
+              git remote add origin git@github.com:drahnr/ci-tron.git
+              git fetch origin pull/((.:pr.number))/head:${GIT_BRANCH_NAME}
+              git checkout ${GIT_BRANCH_NAME}
+
+      - set_pipeline: ci-tron-prs
+        file: foo/.concourse/pipelines/pr.yml
+        vars: { sirmergealot-github-token: ((sirmergealot-github-token)), sirmergealot-webhook-token: "abc123" }
+        instance_vars: { number: ((.:pr.number)) }

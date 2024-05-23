@@ -1,6 +1,7 @@
 resource_types:
 - name: pull-request
   type: registry-image
+  check_every: 1m
   # one cannot use the common github-pull-request-resource by
   # telia-oss, it doesn't support instanced resources
   # as needed in pr.yml as well as here, listing all pull requests.
@@ -10,8 +11,7 @@ resource_types:
 resources:
 - name: git-pull-request-resource
   type: pull-request
-  webhook_token: ((node-webhook-token))
-  check_every: 30s
+  webhook_token: ((sirmergealot-webhook-token))
   source:
     repository: drahnr/ci-tron
     access_token: ((sirmergealot-github-token))
@@ -24,32 +24,35 @@ resources:
     repository: quay.io/drahnr/rust-glibc-builder
 
 
-git-pull-request-status: &pending
+prst-pending: &status-pending
+  put: prst-pending
   resource: git-pull-request-resource
-  inputs: detect
-  params:
+  inputs: [git-pull-request-resource]
+  params: 
     path: git-pull-request-resource
-    context: cargo-fmt
+    context: $BUILD_JOB_NAME
     status: pending
   get_params: {skip_download: true}
 
-git-pull-request-status: &success
-  resource: git-pull-request-resource
-  inputs: detect
-  params:
-    path: git-pull-request-resource
-    context: cargo-fmt
-    status: failure
-  get_params: {skip_download: true}
-
-git-pull-request-status: &failure
-  resource: git-pull-request-resource
-  inputs: detect
-  params:
-    path: git-pull-request-resource
-    context: cargo-fmt
-    status: failure
-  get_params: {skip_download: true}
+prst-result: &status-result
+  on_success:
+    put: prst-success
+    resource: git-pull-request-resource
+    inputs: [git-pull-request-resource]
+    params:
+      path: git-pull-request-resource
+      context: $BUILD_JOB_NAME
+      status: failure
+    get_params: {skip_download: true}
+  on_failure:
+    put: prst-failure
+    resource: git-pull-request-resource
+    inputs: [git-pull-request-resource]
+    params:
+      path: git-pull-request-resource
+      context: $BUILD_JOB_NAME
+      status: failure
+    get_params: {skip_download: true}
 
 
 jobs:
@@ -57,20 +60,19 @@ jobs:
 #                              P U L L - R E Q U E S T
 ####################################################################################
   - name: foo
+    <<: *status-result
+
     plan:
+
     - get: git-pull-request-resource
-      params:
-        integration_tool: rebase
       version: every
       trigger: true
 
+    - <<: *status-pending
+
     - get: env-glibc
 
-    - put: *pending
-      params:
-        context: cargo-fmt
-
-    - task: pr-check-rust-formatting
+    - task: check-foo
       timeout: 10m
       image: env-glibc
       config:
@@ -83,16 +85,33 @@ jobs:
           args:
           - -exc
           - |
-            cargo +nightly fmt --version
+            echo "foo"
 
-            cargo +nightly fmt -- --check
+  - name: downstream
+    <<: *status-result
 
-      on_success:
-        put: *success
-        params:
-          context: cargo-fmt
+    plan:
 
-      on_failure:
-        put: *failure
-        params:
-          context: cargo-fmt
+    - get: git-pull-request-resource
+      version: every
+      passed: [foo]
+      trigger: true
+
+    - <<: *status-pending
+
+    - get: env-glibc
+
+    - task: check-downstream
+      timeout: 10m
+      image: env-glibc
+      config:
+        platform: linux
+        inputs:
+        - name: git-pull-request-resource
+        run:
+          dir: git-pull-request-resource
+          path: sh
+          args:
+          - -exc
+          - |
+            echo "downstream"
