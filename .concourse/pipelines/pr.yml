@@ -1,6 +1,7 @@
 resource_types:
 - name: pull-request
   type: registry-image
+  check_every: 1m
   # one cannot use the common github-pull-request-resource by
   # telia-oss, it doesn't support instanced resources
   # as needed in pr.yml as well as here, listing all pull requests.
@@ -11,7 +12,6 @@ resources:
 - name: git-pull-request-resource
   type: pull-request
   webhook_token: ((sirmergealot-webhook-token))
-  check_every: 30s
   source:
     repository: drahnr/ci-tron
     access_token: ((sirmergealot-github-token))

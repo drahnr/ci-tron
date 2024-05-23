@@ -1,7 +1,7 @@
 resource_types:
 - name: pull-request
   type: registry-image
-  check_every: 5m
+  check_every: 1m
   source:
     repository: docker.io/tasruntime/github-pr-instances-resource
 
@@ -24,7 +24,6 @@ resources:
 - name: git-pull-request-resource
   type: pull-request
   webhook_token: ((ci-tron-webhook-token))
-  check_every: 1m
   source:
     repository: drahnr/ci-tron
     access_token: ((sirmergealot-github-token))
