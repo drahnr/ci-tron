@@ -65,8 +65,6 @@ jobs:
     plan:
 
     - get: git-pull-request-resource
-      params:
-        integration_tool: rebase
       version: every
       trigger: true
 
@@ -74,7 +72,7 @@ jobs:
 
     - get: env-glibc
 
-    - task: cargo-fmt
+    - task: check-foo
       timeout: 10m
       image: env-glibc
       config:
@@ -87,6 +85,33 @@ jobs:
           args:
           - -exc
           - |
-            cargo +nightly fmt --version
+            echo "foo"
 
-            cargo +nightly fmt -- --check
+  - name: downstream
+    <<: *status-result
+
+    plan:
+
+    - get: git-pull-request-resource
+      version: every
+      passed: [foo]
+      trigger: true
+
+    - <<: *status-pending
+
+    - get: env-glibc
+
+    - task: check-downstream
+      timeout: 10m
+      image: env-glibc
+      config:
+        platform: linux
+        inputs:
+        - name: git-pull-request-resource
+        run:
+          dir: git-pull-request-resource
+          path: sh
+          args:
+          - -exc
+          - |
+            echo "downstream"
